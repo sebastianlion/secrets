@@ -4,11 +4,13 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption"); 
+//const encrypt = require("mongoose-encryption"); esto es para el userSchema.plugin
+//const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = 10; //Es para definir cuantas rondas de salt osea de agregar numeros al hash vamos a hacer
 
 const app = express();
 
-console.log(process.env.API_KEY);
 
 app.use(express.static("public"));
 app.set('view engine', 'ejs');
@@ -23,7 +25,7 @@ const userSchema = new mongoose.Schema({
 
 const secret = process.env.SECRET;
  //Se usara esta palabra para encriptar, ahora esta en el .env
-userSchema.plugin(encrypt, { secret: secret, encryptedFields: ["password"]}); //todo lo creado con "userSchema" sera encriptado por la variable secret de arriba
+//userSchema.plugin(encrypt, { secret: secret, encryptedFields: ["password"]}); //todo lo creado con "userSchema" sera encriptado por la variable secret de arriba
 //con encryptedFields se selecciona que campos se desea encriptar
 
 const User = new mongoose.model("User", userSchema);
@@ -42,32 +44,40 @@ app.get("/register", function(req, res){
 });
 
 app.post("/register", function(req, res){
-    const newUser = new User({
-        email: req.body.username,
-        password: req.body.password
+
+    bcrypt.hash(req.body.password, saltRounds, function(err, hash){ //Con esta funcion podemos encriptar el primer parametro(la contraseña) con la cantidad de saltRounds que son el segundo parametro
+
+        const newUser = new User({
+            email: req.body.username,
+            password: hash
+        });
+    
+        newUser.save(function(err){
+            if(err){
+                console.log(err);
+            } else {
+                res.render("secrets");
+            }
+        });
+
     });
 
-    newUser.save(function(err){
-        if(err){
-            console.log(err);
-        } else {
-            res.render("secrets");
-        }
-    });
 });
 
 app.post("/login", function(req, res){
     const username = req.body.username;
-    const password = req.body.password;
+    const password = req.body.password
 
     User.findOne({email: username}, function(err, foundUser){
         if(err){
             console.log(err);
         } else {
             if(foundUser){
-                if(foundUser.password === password){
-                    res.render("secrets");
-                }
+                bcrypt.compare(password, foundUser.password, function(err, result){
+                    if(result === true){
+                        res.render("secrets");
+                    }
+                });
             }
         }
     });
